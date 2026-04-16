@@ -42,14 +42,17 @@ BTH[0x03] = { n: "humidity", t: uint16, f: 0.01, u: "%" };
 BTH[0x04] = { n: "pressure", t: uint24, f: 0.01, u: "hPa" };
 BTH[0x05] = { n: "illuminance", t: uint24, f: 0.01, u: "lux" };
 BTH[0x09] = { n: "count", t: uint8 };
-BTH[0x0A] = { n: "energy", t: uint8 };
+BTH[0x0A] = { n: "energy", t: uint24, f: 0.001, u: "kWh" };
 BTH[0x0C] = { n: "voltage", t: uint16, f: 0.001, u: "V" };
 BTH[0x10] = { n: "power", t: uint8 };
 BTH[0x11] = { n: "opening", t: uint8 };
 BTH[0x14] = { n: "moisture", t: uint16 };
 BTH[0x15] = { n: "batteryLow", t: uint8 };
 BTH[0x16] = { n: "batteryCharging", t: uint8 };
+BTH[0x1A] = { n: "door", t: uint8 };
 BTH[0x21] = { n: "motion", t: uint8 };
+BTH[0x23] = { n: "occupancy", t: uint8 };
+BTH[0x2B] = { n: "tamper", t: uint8 };
 BTH[0x2D] = { n: "window", t: uint8 };
 BTH[0x3A] = { n: "button", t: uint8 };
 BTH[0x3F] = { n: "rotation", t: int16, f: 0.1, u: "deg" };
@@ -76,7 +79,8 @@ function logger(message, prefix) {
   console.log(prefix, text);
 }
 
-// BTHome v2 decoder
+// BTHome v2 decoder. Unencrypted packets only — encrypted packets are
+// flagged via `encryption: true` and dropped by the BLE scan callback.
 let BTHomeDecoder = {
   // unsigned to signed integer conversion
   utoi: function(num, bitsz) {

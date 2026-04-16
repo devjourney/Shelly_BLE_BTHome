@@ -1,4 +1,5 @@
 let CONFIG = {
+  debug: false,
   // the BTHome motion and light sensors that will report to this device
   // add a Bluetooth MAC address for each reporting sensor
   sensorMACs: [
@@ -58,14 +59,17 @@ BTH[0x03] = { n: "humidity", t: uint16, f: 0.01, u: "%" };
 BTH[0x04] = { n: "pressure", t: uint24, f: 0.01, u: "hPa" };
 BTH[0x05] = { n: "illuminance", t: uint24, f: 0.01, u: "lux" };
 BTH[0x09] = { n: "count", t: uint8 };
-BTH[0x0A] = { n: "energy", t: uint8 };
+BTH[0x0A] = { n: "energy", t: uint24, f: 0.001, u: "kWh" };
 BTH[0x0C] = { n: "voltage", t: uint16, f: 0.001, u: "V" };
 BTH[0x10] = { n: "power", t: uint8 };
 BTH[0x11] = { n: "opening", t: uint8 };
 BTH[0x14] = { n: "moisture", t: uint16 };
 BTH[0x15] = { n: "batteryLow", t: uint8 };
 BTH[0x16] = { n: "batteryCharging", t: uint8 };
+BTH[0x1A] = { n: "door", t: uint8 };
 BTH[0x21] = { n: "motion", t: uint8 };
+BTH[0x23] = { n: "occupancy", t: uint8 };
+BTH[0x2B] = { n: "tamper", t: uint8 };
 BTH[0x2D] = { n: "window", t: uint8 };
 BTH[0x3A] = { n: "button", t: uint8 };
 BTH[0x3F] = { n: "rotation", t: int16, f: 0.1, u: "deg" };
@@ -77,11 +81,27 @@ function getByteSize(type) {
   return 255;
 }
 
-// BTHome v2 decoder
+// debug logger
+function logger(message, prefix) {
+  if (!CONFIG.debug) return;
+  let text = "";
+  if (Array.isArray(message)) {
+    for (let i = 0; i < message.length; i++) {
+      text += " " + JSON.stringify(message[i]);
+    }
+  } else {
+    text = JSON.stringify(message);
+  }
+  prefix = typeof prefix === "string" ? prefix + ":" : "";
+  console.log(prefix, text);
+}
+
+// BTHome v2 decoder. Unencrypted packets only — encrypted packets are
+// flagged via `encryption: true` and dropped by the BLE scan callback.
 let BTHomeDecoder = {
   // unsigned to signed integer conversion
   utoi: function(num, bitsz) {
-    var mask = 1 << (bitsz - 1);
+    let mask = 1 << (bitsz - 1);
     return num & mask ? num - (1 << bitsz) : num;
   },
 
@@ -123,27 +143,30 @@ let BTHomeDecoder = {
   unpack: function(buffer) {
     if (typeof buffer !== "string" || buffer.length === 0) return null;
 
-    var result = {};
-    var dib = buffer.at(0);
+    let result = {};
+    let dib = buffer.at(0);
     result.encryption = (dib & 0x1) ? true : false;
     result.BTHome_version = dib >> 5;
 
     if (result.BTHome_version !== 2) return null;
-    if (result.encryption) return result;
+    if (result.encryption) {
+      logger("Encrypted devices are not supported", "BTH");
+      return result;
+    }
 
     buffer = buffer.slice(1);
 
     while (buffer.length > 0) {
-      var objId = buffer.at(0);
-      var bth = BTH[objId];
+      let objId = buffer.at(0);
+      let bth = BTH[objId];
 
       if (typeof bth === "undefined") {
-        print("Unknown BTHome object ID: 0x" + objId.toString(16));
+        logger(["Unknown BTHome object ID:", "0x" + objId.toString(16)], "BTH");
         break;
       }
 
       buffer = buffer.slice(1);
-      var value = this.getBufValue(bth.t, buffer);
+      let value = this.getBufValue(bth.t, buffer);
       if (value === null) break;
 
       if (typeof bth.f !== "undefined") {
